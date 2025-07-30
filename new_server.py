@@ -1,19 +1,47 @@
 from flask import Flask, request, jsonify
+import hashlib, datetime
 
 app = Flask(__name__)
+USERS = {}
 
-# Replace with your real license database
-LICENSE_DB = {
-    "798cc49492d5a6c9fde2db189f09a013aa56fe7e7bfe5ed33fcfdff7275cb5b3": {"status": "active"},
-    "blocked-key-123": {"status": "blocked"},
-}
+@app.route("/validate", methods=["POST"])
+def validate():
+    data = request.json
+    email = data["email"]
+    password = data["password"]
+    device_id = data["device_id"]
+    key = email + password + "SECRET"
+    token = hashlib.sha256(key.encode()).hexdigest()
 
-@app.route("/verify_license")
-def verify_license():
-    key = request.args.get("key")
-    if key in LICENSE_DB:
-        return jsonify({"status": LICENSE_DB[key]["status"]})
-    return jsonify({"status": "not_found"}), 404
+    # Register user if first time
+    if email not in USERS:
+        USERS[email] = {
+            "password": password,
+            "device_id": device_id,
+            "start": datetime.date.today().isoformat(),
+            "status": "active"
+        }
+
+    user = USERS[email]
+
+    # Block if device mismatch
+    if user["device_id"] != device_id:
+        return jsonify({"status": "blocked"}), 403
+
+    # Blocked manually
+    if user["status"] == "blocked":
+        return jsonify({"status": "blocked"}), 403
+
+    # Check if trial expired
+    days = (datetime.date.today() - datetime.date.fromisoformat(user["start"])).days
+    if days > 7:
+        return jsonify({"status": "expired"}), 403
+
+    return jsonify({
+        "status": "active",
+        "auth_token": token,
+        "expires": 7 - days
+    })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run()
