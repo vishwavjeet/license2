@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-import hashlib, datetime
+import hashlib, datetime, os
 
 app = Flask(__name__)
 USERS = {}
@@ -13,7 +13,6 @@ def validate():
     key = email + password + "SECRET"
     token = hashlib.sha256(key.encode()).hexdigest()
 
-    # Register user if first time
     if email not in USERS:
         USERS[email] = {
             "password": password,
@@ -24,15 +23,12 @@ def validate():
 
     user = USERS[email]
 
-    # Block if device mismatch
     if user["device_id"] != device_id:
         return jsonify({"status": "blocked"}), 403
 
-    # Blocked manually
     if user["status"] == "blocked":
         return jsonify({"status": "blocked"}), 403
 
-    # Check if trial expired
     days = (datetime.date.today() - datetime.date.fromisoformat(user["start"])).days
     if days > 7:
         return jsonify({"status": "expired"}), 403
@@ -44,4 +40,5 @@ def validate():
     })
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
